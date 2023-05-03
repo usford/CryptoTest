@@ -1,0 +1,111 @@
+﻿@page "/"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject IHttpClientFactory ClientFactory
+@inject IConfiguration Configuration
+
+@if (getWallets || wallets is null)
+{
+    <p>Error loading wallets</p>
+}
+else
+{
+    <p style="text-align:center"> Страница - @counter </p>
+    <div class="main-container">
+        <table>
+            <tr>
+                <th @onclick="SortedId">Id</th>
+                <th>Address</th>
+                <th @onclick="SortedBalance">Balance</th>
+            </tr>
+            @foreach (var wallet in wallets)
+            {
+                <tr>
+                    <td>@wallet.Id</td>
+                    <td>@wallet.Address</td>
+                    <td>@wallet.Balance ETH</td>
+                </tr>
+            }
+        </table>
+        <div class="main-container_footer">
+            <div class="main-container_actions">
+                <img style="@HiddenButtonLeft()" @onclick="@(e => GetWallets(--counter))" src="images/left.png">
+                <img @onclick="@(e => GetWallets(counter))" src="images/refresh.png">
+                <img @onclick="@(e => GetWallets(++counter))" src="images/right.png">
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IEnumerable<Wallet>? wallets = Array.Empty<Wallet>();
+    private bool getWallets;
+    private bool shouldRender;
+    private int counter = 1;
+    private int sort;
+
+    protected override bool ShouldRender() => shouldRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetWallets(1);
+
+        shouldRender = true;
+    }
+
+    private async Task GetWallets(int count)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get,
+                $"{@Configuration["url"]}?page={count}&sort={sort}");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+            wallets = await JsonSerializer.DeserializeAsync<IEnumerable<Wallet>>(responseStream);
+        }
+        else
+        {
+            getWallets = true;
+        }
+    }
+
+    private string HiddenButtonLeft()
+    {
+        if (counter == 1)
+        {
+            return "visibility:hidden";
+        }
+        else
+        {
+            return "";
+        }
+    }
+
+    private async Task SortedId()
+    {
+        sort = sort == 0 ? 1 : 0;
+
+        await GetWallets(counter);
+    }
+
+    private async Task SortedBalance()
+    {
+        sort = sort == 2 ? 3 : 2;
+
+        await GetWallets(counter);
+    }
+
+    public class Wallet
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+        [JsonPropertyName("address")]
+        public string Address { get; set; }
+        [JsonPropertyName("balance")]
+        public decimal? Balance { get; set; }
+    }
+}
